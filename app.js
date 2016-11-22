@@ -35,10 +35,9 @@
   ]
 };
 */
-var json_src ="";
-var Client = require('node-rest-client').Client;
-var client = new Client();
-var list_files = [];
+let Client = require('node-rest-client').Client;
+let client = new Client();
+let list_files = [];
 // direct way
 /*client.get("http://anax.feralhosting.com:8088/files", function (data, response) {
     // parsed response body as js object
@@ -51,25 +50,24 @@ var list_files = [];
 // registering remote methods
 client.registerMethod("jsonMethod", "http://anax.feralhosting.com:8088/files", "GET");
 
-client.methods.jsonMethod(function (data, response) {
+client.methods.jsonMethod((data, response) => {
     // parsed response body as js object
     console.log(data);
-    var json_src = data;
     list_files = []
     // raw response
     //console.log(response);
-    findFilesRecursively(json_src);
+    findFilesRecursively(data);
     console.log(list_files);
 });
 
 
-function findFilesRecursively(json){
+let findFilesRecursively = (json) =>{
     if(json.type == "file"){
       list_files.push(json.path);
     }
     else {
       for (var i = 0; i < json.children.length; i++) {
-        var child = json.children[i];
+        let child = json.children[i];
         findFilesRecursively(child);
       }
     }
