@@ -2,12 +2,12 @@ let Client = require('node-rest-client').Client;
 let client = new Client();
 let password = process.env.DS_PASSWORD;
 let user = process.env.DS_USER;
+let remoteServer = process.env.REMOTE_SERVER; // http://anax.feralhosting.com:8088
 let rootUrlServer = 'http://bloodmaker.anax.feralhosting.com/links/';
 
 // registering remote methods
-client.registerMethod('getRemoteFileList', 'http://anax.feralhosting.com:8088/files', 'GET');
+client.registerMethod('getRemoteFileList', remoteServer+'/files', 'GET');
 
-client.registerMethod('devCall','http://localhost:8088/files','GET');
 
 client.registerMethod('synoLogin','http://192.168.1.200:5555/webapi/auth.cgi?api=SYNO.API.Auth&version=2&method=login&account='+user+'&passwd='+password+'&session=DownloadStation&format=sid','GET');
 
@@ -34,7 +34,7 @@ let GetDownloadTaskList = (sid) => {
 let CompareRemoteToLocal = (tasks,sid) => {
   let fileToAddToDownloadList = [];
   let fileToRemoveFromServer = [];
-  client.methods.devCall((data, response) => {
+  client.methods.getRemoteFileList((data, response) => {
     for (let i = 0; i < data.length; i++) {
       let remoteItem = data[i];
       let alreadyExists = false;
