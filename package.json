@@ -1,6 +1,10 @@
 {
   "name": "download-from-json",
   "version": "1.0.0",
+  "repository": {
+    "type": "git",
+    "url":"https://github.com/TeamBrookie/synology-autodl-manager"
+  },
   "description": "Download files from a json file using Synology download station",
   "main": "app.js",
   "scripts": {
