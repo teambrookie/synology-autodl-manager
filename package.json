@@ -13,6 +13,7 @@
   "author": "Etienne STROBBE",
   "license": "MIT",
   "dependencies": {
-    "node-rest-client": "2.0.1"
+    "node-rest-client": "2.0.1",
+    "superagent": "3.3.1"
   }
 }

@@ -2,73 +2,171 @@ let Client = require('node-rest-client').Client;
 let client = new Client();
 let password = process.env.DS_PASSWORD;
 let user = process.env.DS_USER;
-let rootUrlServer = 'http://bloodmaker.anax.feralhosting.com/links/';
+let rootUrlServer = process.env.ROOT_PATH_REMOTE_SERVER || 'http://bloodmaker.anax.feralhosting.com/links/';
+let synoUrl = process.env.DS_URL || 'http://192.168.1.200:5555'; //'http://bloodmaker.ddns.net';
+let remoteUrl = 'http://anax.feralhosting.com:8088';
+let remoteToken;
+var request = require('superagent');
 
-// registering remote methods
-client.registerMethod('getRemoteFileList', 'http://anax.feralhosting.com:8088/files', 'GET');
+let destFolder = process.env.DS_DEST_FOLDER;
 
-client.registerMethod('devCall','http://localhost:8088/files','GET');
-
-client.registerMethod('synoLogin','http://192.168.1.200:5555/webapi/auth.cgi?api=SYNO.API.Auth&version=2&method=login&account='+user+'&passwd='+password+'&session=DownloadStation&format=sid','GET');
-
-client.methods.synoLogin((data, response) => {
-  let jsonResponse = JSON.parse(data);
-  if (jsonResponse.success) { // no error in logging
-    sid = jsonResponse.data.sid;
-    console.log("Logged in",sid);
-    GetDownloadTaskList(sid);
-  }
-  else{
-    console.log(jsonResponse.error);
-  }
-});
-
-let GetDownloadTaskList = (sid) => {
-  client.get('http://192.168.1.200:5555/webapi/DownloadStation/task.cgi?api=SYNO.DownloadStation.Task&version=1&method=list&additional=file&_sid='+sid, function (data, response) {
-    var jsonResponse = JSON.parse(data);
-    var tasks = jsonResponse.data.tasks;
-    CompareRemoteToLocal(tasks,sid);
+let loginToRemoteServer = (user,pass) => {
+  console.log('Login to source server');
+  request
+  .post(remoteUrl + '/auth')
+  .set('Content-Type', 'application/x-www-form-urlencoded')
+  .send({ username: user, password: pass })
+  .end(function(err, res){
+    // Do something
+    if (err) {
+      console.log('Login failed');
+      console.log(res.text);
+      remoteToken = null;
+    }
+    else {
+      remoteToken = JSON.parse(res.text);
+      console.log('>>Login success to source server');
+      loginToDestServer('','');
+    }
   });
 };
 
-let CompareRemoteToLocal = (tasks,sid) => {
-  let fileToAddToDownloadList = [];
-  let fileToRemoveFromServer = [];
-  client.methods.devCall((data, response) => {
-    for (let i = 0; i < data.length; i++) {
-      let remoteItem = data[i];
-      let alreadyExists = false;
-      for (let j = 0; j < tasks.length; j++) {
-        if (remoteItem.name == tasks[j].title) {
-          alreadyExists = true;
-          fileToRemoveFromServer.push(remoteItem);
-        }
+let loginToDestServer = (user,password) => {
+  console.log('Login to destination server');
+  request
+  .get(synoUrl + '/webapi/auth.cgi')
+  .query({
+    api: 'SYNO.API.Auth',
+    version: '2',
+    method: 'login',
+    account: user,
+    passwd: password,
+    session: 'DownloadStation',
+    format: 'sid'
+  }) // query string
+  .end(function(err, res){
+    if (err) {
+      console.log('Error trying to connect to destination server (timeout)')
+    }
+    else{
+      let jsonResponse = JSON.parse(res.text);
+      if (jsonResponse.error) {
+        console.log(jsonResponse.error.code);
       }
-      if (!alreadyExists) {
-        fileToAddToDownloadList.push(remoteItem);
+      else {
+        console.log('>>Login success to destination server');
+        sid = jsonResponse.data.sid;
+        GetDownloadTaskList(sid);
       }
     }
-    AddFileToDownloadList(fileToAddToDownloadList,sid);
-    RemoveFilesFromServer(fileToRemoveFromServer);
-  });
+  })
+};
+
+loginToRemoteServer('','');
+
+
+let GetDownloadTaskList = (sid) => {
+  console.log('Listing current task in DownloadStation');
+  request
+   .get(synoUrl + '/webapi/DownloadStation/task.cgi')
+   .query({
+     api:'SYNO.DownloadStation.Task',
+     version: '1',
+     method: 'list',
+     additional:'file',
+     _sid:sid
+   })
+   .end(function(err,res){
+     if (err) {
+       console.log('Error trying to connect to destination server (timeout)')
+     }
+     else{
+       let jsonResponse = JSON.parse(res.text);
+       if (jsonResponse.error) {
+         console.log(jsonResponse.error.code);
+       }
+       else {
+         console.log('>>Listing tasks ok');
+         GetRemoteFileList(jsonResponse.data.tasks, sid);
+       }
+     }
+   });
+};
+
+let CompareRemoteToLocal = (tasks,listFiles,sid) => {
+  console.log('Compare sources files to current tasks');
+  let fileToAddToDownloadList = [];
+  let fileToRemoveFromServer = [];
+  for (let i = 0; i < listFiles.length; i++) {
+    let remoteItem = listFiles[i];
+    let alreadyExists = false;
+    for (let j = 0; j < tasks.length; j++) {
+      if (remoteItem.name == tasks[j].title) {
+        alreadyExists = true;
+        fileToRemoveFromServer.push(remoteItem);
+      }
+    }
+    if (!alreadyExists) {
+      fileToAddToDownloadList.push(remoteItem);
+    }
+  }
+  AddFileToDownloadList(fileToAddToDownloadList,sid);
+  //RemoveFilesFromServer(fileToRemoveFromServer);
+}
+
+let GetRemoteFileList = (tasks,sid) => {
+  console.log('Getting file list from source server with token '+remoteToken);
+  request
+   .get(remoteUrl + '/files')
+   .set('Accept','application/json')
+   .set('Authorization', 'Bearer '+remoteToken)
+   .end(function(err,res){
+     if (err) {
+       console.log('FAILED');
+       console.log(err);
+     }
+     else{
+       console.log('Getting list of files SUCCESS');
+       CompareRemoteToLocal(tasks,res.body,sid);
+     }
+   });
 };
 
 let AddFileToDownloadList = (list,sid) => {
+  console.log('Starting to add files to Download Task List');
+  var destFolderArg = destFolder ? '&destination='+destFolder : '';
   for (let i = 0; i < list.length; i++) {
+
     let endPath = list[i].path;
     let firstSlashIndex = endPath.indexOf('/');
-    let url_file = 'http://localhost/'+list[i].path.substring(firstSlashIndex+1)+list[i].name;
+    let url_file = rootUrlServer+list[i].path.substring(firstSlashIndex+1)+list[i].name;
+    //url_file = url_file.replace(/\/\//,'/');
     url_file = url_file.replace(/ /g,'%20');
-    console.log('adding file with url',url_file);
-    client.get('http://192.168.1.200:5555/webapi/DownloadStation/task.cgi?api=SYNO.DownloadStation.Task&version=1&method=create&uri='+url_file+'&_sid='+sid,function(data,response){
-      console.log('task added',JSON.parse(data));
-    });
+    url_file = url_file.replace(/,/g,'%2C');
+    console.log('Addding file',list[i].name);
+    //console.log('adding file with url',url_file);
+    request
+     .get(synoUrl + '/webapi/DownloadStation/task.cgi')
+     .query({
+       api:'SYNO.DownloadStation.Task',
+       version: '1',
+       method: 'create',
+       uri: url_file,
+       _sid: sid
+     })
+     .end(function(err,res){
+
+     });
+    //client.get(synoUrl+'/webapi/DownloadStation/task.cgi?api=SYNO.DownloadStation.Task&version=1&method=create&uri='+url_file+'&_sid='+sid+destFolderArg,function(data,response){
+    //  console.log('>>>>>>>>>>>>>>task added',list[i].name);
+      //console.log(url_file);
+    //});
   }
-  CleanUpDownloadTasks(sid);
+  //CleanUpDownloadTasks(sid);
 }
 
 let CleanUpDownloadTasks = (sid) => {
-  client.get('http://192.168.1.200:5555/webapi/DownloadStation/task.cgi?api=SYNO.DownloadStation.Task&version=1&method=list&additional=file&_sid='+sid, function (data, response) {
+  client.get(synoUrl+'/webapi/DownloadStation/task.cgi?api=SYNO.DownloadStation.Task&version=1&method=list&additional=file&_sid='+sid, function (data, response) {
     var jsonResponse = JSON.parse(data);
     var tasks = jsonResponse.data.tasks;
     for (var i = 0; i < tasks.length; i++) {
