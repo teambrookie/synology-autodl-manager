@@ -187,7 +187,7 @@ let RemoveFilesFromServer = (files) => {
   };
   client.delete('http://localhost:8088/files',args,function(data,response){});
 };
-
-for (;;) {
-  sleep(loopTime).then(loginToRemoteServer(remoteUser,remotePassword));
-}
+loginToRemoteServer(remoteUser,remotePassword)
+/*for (;;) {
+  sleep(loopTime).then();
+}*/
