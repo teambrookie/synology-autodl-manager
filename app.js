@@ -1,10 +1,14 @@
 let Client = require('node-rest-client').Client;
 let client = new Client();
-let password = process.env.DS_PASSWORD;
-let user = process.env.DS_USER;
+let loopTime = process.env.LOOP_TIME;
+let remoteUser = process.env.REMOTE_USER;
+let remotePassword = process.env.REMOTE_PASSWORD;
+let destPassword = process.env.DS_PASSWORD;
+let destUser = process.env.DS_USER;
 let rootUrlServer = process.env.ROOT_PATH_REMOTE_SERVER || 'http://bloodmaker.anax.feralhosting.com/links/';
 let synoUrl = process.env.DS_URL || 'http://192.168.1.200:5555'; //'http://bloodmaker.ddns.net';
 let remoteUrl = 'http://anax.feralhosting.com:8088';
+
 let remoteToken;
 var request = require('superagent');
 
@@ -26,7 +30,7 @@ let loginToRemoteServer = (user,pass) => {
     else {
       remoteToken = JSON.parse(res.text);
       console.log('>>Login success to source server');
-      loginToDestServer('','');
+      loginToDestServer(destUser,destPassword);
     }
   });
 };
@@ -62,7 +66,6 @@ let loginToDestServer = (user,password) => {
   })
 };
 
-loginToRemoteServer('','');
 
 
 let GetDownloadTaskList = (sid) => {
@@ -185,3 +188,8 @@ let RemoveFilesFromServer = (files) => {
   };
   client.delete('http://localhost:8088/files',args,function(data,response){});
 };
+
+for (;;) {
+  loginToRemoteServer(remoteUser,remotePassword);
+  sleep(loopTime);
+}
