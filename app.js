@@ -1,5 +1,3 @@
-let Client = require('node-rest-client').Client;
-let client = new Client();
 let loopTime = process.env.LOOP_TIME;
 let remoteUser = process.env.REMOTE_USER;
 let remotePassword = process.env.REMOTE_PASSWORD;
