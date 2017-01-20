@@ -191,6 +191,5 @@ let RemoveFilesFromServer = (files) => {
 };
 
 for (;;) {
-  loginToRemoteServer(remoteUser,remotePassword);
-  sleep.sleep(loopTime);
+  sleep(loopTime).then(loginToRemoteServer(remoteUser,remotePassword));
 }
