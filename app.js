@@ -8,6 +8,7 @@ let destUser = process.env.DS_USER;
 let rootUrlServer = process.env.ROOT_PATH_REMOTE_SERVER || 'http://bloodmaker.anax.feralhosting.com/links/';
 let synoUrl = process.env.DS_URL || 'http://192.168.1.200:5555'; //'http://bloodmaker.ddns.net';
 let remoteUrl = 'http://anax.feralhosting.com:8088';
+var sleep = require('sleep');
 
 let remoteToken;
 var request = require('superagent');
@@ -191,5 +192,5 @@ let RemoveFilesFromServer = (files) => {
 
 for (;;) {
   loginToRemoteServer(remoteUser,remotePassword);
-  sleep(loopTime);
+  sleep.sleep(loopTime);
 }
