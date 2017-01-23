@@ -1,20 +1,20 @@
-let loopTime = process.env.LOOP_TIME;
-let remoteUser = process.env.REMOTE_USER;
-let remotePassword = process.env.REMOTE_PASSWORD;
-let destPassword = process.env.DS_PASSWORD;
-let destUser = process.env.DS_USER;
+let loopTime = process.env.LOOP_TIME || 10000;
+let remoteUser = process.env.REMOTE_USER || 'default_user';
+let remotePassword = process.env.REMOTE_PASSWORD || 'no_password';
+let destPassword = process.env.DS_PASSWORD || 'no_password';
+let destUser = process.env.DS_USER || 'default_user';
 let rootUrlServer = process.env.ROOT_PATH_REMOTE_SERVER || 'http://bloodmaker.anax.feralhosting.com/links/';
-let synoUrl = process.env.DS_URL || 'http://192.168.1.200:5555'; //'http://bloodmaker.ddns.net';
+let synoUrl = process.env.DS_URL || 'http://192.168.1.200:5555';
 let remoteUrl = 'http://anax.feralhosting.com:8088';
-var sleep = require('sleep-promise');
-
 let remoteToken;
 var request = require('superagent');
+let CronJob = require('cron').CronJob;
 
 let destFolder = process.env.DS_DEST_FOLDER;
 
 let loginToRemoteServer = (user,pass) => {
   console.log('Login to source server');
+  console.log('logging to',remoteUrl + '/auth');
   request
   .post(remoteUrl + '/auth')
   .set('Content-Type', 'application/x-www-form-urlencoded')
@@ -23,7 +23,7 @@ let loginToRemoteServer = (user,pass) => {
     // Do something
     if (err) {
       console.log('Login failed');
-      console.log(res.text);
+      console.log(res);
       remoteToken = null;
     }
     else {
@@ -102,18 +102,23 @@ let CompareRemoteToLocal = (tasks,listFiles,sid) => {
   for (let i = 0; i < listFiles.length; i++) {
     let remoteItem = listFiles[i];
     let alreadyExists = false;
+    let finished = false;
     for (let j = 0; j < tasks.length; j++) {
+
       if (remoteItem.name == tasks[j].title) {
+        console.log(remoteItem.name, tasks[j].title);
         alreadyExists = true;
-        fileToRemoveFromServer.push(remoteItem);
+        if (tasks[j].status == 'finished') {
+          fileToRemoveFromServer.push(remoteItem);
+        }
       }
     }
     if (!alreadyExists) {
       fileToAddToDownloadList.push(remoteItem);
     }
   }
-  AddFileToDownloadList(fileToAddToDownloadList,sid);
-  //RemoveFilesFromServer(fileToRemoveFromServer);
+  CleanUpDownloadTasks(fileToAddToDownloadList,sid);
+  RemoveFilesFromServer(fileToRemoveFromServer);
 }
 
 let GetRemoteFileList = (tasks,sid) => {
@@ -137,6 +142,8 @@ let GetRemoteFileList = (tasks,sid) => {
 let AddFileToDownloadList = (list,sid) => {
   console.log('Starting to add files to Download Task List');
   var destFolderArg = destFolder ? '&destination='+destFolder : '';
+  // Due to Synology API limitation, I choose to limit the list to 20 items.
+  list = list.splice(0,Math.min(20,list.length));
   for (let i = 0; i < list.length; i++) {
 
     let endPath = list[i].path;
@@ -145,7 +152,7 @@ let AddFileToDownloadList = (list,sid) => {
     //url_file = url_file.replace(/\/\//,'/');
     url_file = url_file.replace(/ /g,'%20');
     url_file = url_file.replace(/,/g,'%2C');
-    console.log('Addding file',list[i].name);
+    console.log('Adding file',list[i].name);
     //console.log('adding file with url',url_file);
     request
      .get(synoUrl + '/webapi/DownloadStation/task.cgi')
@@ -157,37 +164,94 @@ let AddFileToDownloadList = (list,sid) => {
        _sid: sid
      })
      .end(function(err,res){
+       if (err) {
+         console.log('FAILED to add',list[i].name);
+         console.log(err);
+       }
+       else{
+         if (JSON.parse(res.text).error) {
+           console.log('FAILED to add',list[i].name);
+           console.log('error',JSON.parse(res.text).error);
+         }
+         else{
+           console.log('File added with SUCCESS:',list[i].name);
+         }
 
+       }
      });
-    //client.get(synoUrl+'/webapi/DownloadStation/task.cgi?api=SYNO.DownloadStation.Task&version=1&method=create&uri='+url_file+'&_sid='+sid+destFolderArg,function(data,response){
-    //  console.log('>>>>>>>>>>>>>>task added',list[i].name);
-      //console.log(url_file);
-    //});
   }
-  //CleanUpDownloadTasks(sid);
 }
-
-let CleanUpDownloadTasks = (sid) => {
-  client.get(synoUrl+'/webapi/DownloadStation/task.cgi?api=SYNO.DownloadStation.Task&version=1&method=list&additional=file&_sid='+sid, function (data, response) {
-    var jsonResponse = JSON.parse(data);
-    var tasks = jsonResponse.data.tasks;
-    for (var i = 0; i < tasks.length; i++) {
-      if (tasks[i].status == 'finished') {
-        //console.log('Removing '+tasks.title+' from download tasks');
-        //client.get('http://192.168.1.200:5555/webapi/DownloadStation/task.cgi?api=SYNO.DownloadStation.Task&version=1&method=delete&id='+tasks[i].id+'&_sid='+sid,function(data,response){});
-      }
-    }
-  });
-};
-
 let RemoveFilesFromServer = (files) => {
-  var args = {
-    data: files,
-    headers: { "Content-Type": "application/json" }
-  };
-  client.delete('http://localhost:8088/files',args,function(data,response){});
+  request
+    .delete(remoteUrl + '/files')
+    .send(files)
+    .set('Authorization', 'Bearer '+remoteToken)
+    .set('Content-Type','application/json')
+    .end(function(err,res){
+      if(err){
+        console.log("Failed to delete on remote server");
+      }
+      else{
+        console.log(files.length,'files have been deleted');
+      }
+    });
 };
-loginToRemoteServer(remoteUser,remotePassword)
-/*for (;;) {
-  sleep(loopTime).then();
-}*/
+
+let CleanUpDownloadTasks = (list,sid) => {
+  console.log('Cleaning up tasks on DS...');
+  request
+    .get(synoUrl + '/webapi/DownloadStation/task.cgi')
+    .query({
+      api:'SYNO.DownloadStation.Task',
+      version:'1',
+      method:'list',
+      additional:'file',
+      _sid:sid
+    })
+    .end(function(err,res){
+      if (err) {
+        console.error("Error while calling Synology API");
+      }
+      else {
+        if(JSON.parse(res.text).error){
+
+        }
+        else{
+          var tasks = JSON.parse(res.text).data.tasks;
+          for (var i = 0; i < tasks.length; i++) {
+            if (tasks[i].status == 'finished') {
+              let title = tasks[i].title;
+              console.log('Removing '+title+' from download tasks');
+              request
+                .get(synoUrl + '/webapi/DownloadStation/task.cgi')
+                .query({
+                  api:'SYNO.DownloadStation.Task',
+                  version:'1',
+                  method:'delete',
+                  id:tasks[i].id,
+                  _sid:sid
+                })
+                .end(function(err,res){
+                  if (err) {
+                      console.error("Error while calling Synology API");
+                  }
+                  else {
+                    if(JSON.parse(res.text).error){
+                        console.error("Error while calling Synology API",JSON.parse(res.text).error);
+                    }
+                    else{
+                      console.log('File',title +' deleted');
+                    }
+                  }
+                });
+            }
+          }
+        }
+      }
+    });
+    AddFileToDownloadList(list,sid);
+};
+
+new CronJob('0 * * * * *', function() {
+  loginToRemoteServer(remoteUser,remotePassword)
+}, null, true);
