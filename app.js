@@ -20,7 +20,6 @@ let loginToRemoteServer = (user,pass) => {
   .set('Content-Type', 'application/x-www-form-urlencoded')
   .send({ username: user, password: pass })
   .end(function(err, res){
-    // Do something
     if (err) {
       console.log('Login failed');
       console.log(res);
@@ -64,8 +63,6 @@ let loginToDestServer = (user,password) => {
     }
   })
 };
-
-
 
 let GetDownloadTaskList = (sid) => {
   console.log('Listing current task in DownloadStation');
@@ -252,6 +249,6 @@ let CleanUpDownloadTasks = (list,sid) => {
     AddFileToDownloadList(list,sid);
 };
 
-new CronJob('0 * * * * *', function() {
+new CronJob('* */10 * * * *', function() {
   loginToRemoteServer(remoteUser,remotePassword)
 }, null, true);
