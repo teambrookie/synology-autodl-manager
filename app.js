@@ -5,13 +5,14 @@ let destPassword = process.env.DS_PASSWORD || 'no_password';
 let destUser = process.env.DS_USER || 'default_user';
 let rootUrlServer = process.env.ROOT_PATH_REMOTE_SERVER || 'http://bloodmaker.anax.feralhosting.com/links/';
 let synoUrl = process.env.DS_URL || 'http://192.168.1.200:5555';
-let remoteUrl = 'http://anax.feralhosting.com:8088';
+let remoteUrl = process.env.REMOTE_URL || 'http://anax.feralhosting.com:8088';
 let remoteToken;
 var request = require('superagent');
 let CronJob = require('cron').CronJob;
 
 let destFolder = process.env.DS_DEST_FOLDER;
-
+let maxTasksCount = 25;
+let currentTasksCount = 25;
 let loginToRemoteServer = (user,pass) => {
   console.log('Login to source server');
   console.log('logging to',remoteUrl + '/auth');
@@ -86,6 +87,7 @@ let GetDownloadTaskList = (sid) => {
        }
        else {
          console.log('>>Listing tasks ok');
+	 currentTasksCount = jsonResponse.data.tasks.length;
          GetRemoteFileList(jsonResponse.data.tasks, sid);
        }
      }
@@ -103,7 +105,6 @@ let CompareRemoteToLocal = (tasks,listFiles,sid) => {
     for (let j = 0; j < tasks.length; j++) {
 
       if (remoteItem.name == tasks[j].title) {
-        console.log(remoteItem.name, tasks[j].title);
         alreadyExists = true;
         if (tasks[j].status == 'finished') {
           fileToRemoveFromServer.push(remoteItem);
@@ -140,7 +141,8 @@ let AddFileToDownloadList = (list,sid) => {
   console.log('Starting to add files to Download Task List');
   var destFolderArg = destFolder ? '&destination='+destFolder : '';
   // Due to Synology API limitation, I choose to limit the list to 20 items.
-  list = list.splice(0,Math.min(20,list.length));
+  let numberOfTasksToAdd = Math.min(20,maxTasksCount - currentTasksCount);
+  list = list.splice(0,Math.min(numberOfTasksToAdd,list.length));
   for (let i = 0; i < list.length; i++) {
 
     let endPath = list[i].path;
@@ -179,6 +181,7 @@ let AddFileToDownloadList = (list,sid) => {
   }
 }
 let RemoveFilesFromServer = (files) => {
+  //console.log('Removings files',files);
   request
     .delete(remoteUrl + '/files')
     .send(files)
@@ -248,7 +251,7 @@ let CleanUpDownloadTasks = (list,sid) => {
     });
     AddFileToDownloadList(list,sid);
 };
-
-new CronJob('* */10 * * * *', function() {
+var i=0;
+new CronJob('0 */3 * * * *', function() {
   loginToRemoteServer(remoteUser,remotePassword)
 }, null, true);
