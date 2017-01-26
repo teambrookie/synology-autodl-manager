@@ -11,8 +11,8 @@ var request = require('superagent');
 let CronJob = require('cron').CronJob;
 
 let destFolder = process.env.DS_DEST_FOLDER;
-let maxTasksCount = 25;
-let currentTasksCount = 25;
+let maxTasksCount = 30;
+let currentTasksCount = 30;
 let loginToRemoteServer = (user,pass) => {
   console.log('Login to source server');
   console.log('logging to',remoteUrl + '/auth');
@@ -93,8 +93,20 @@ let GetDownloadTaskList = (sid) => {
      }
    });
 };
-
-let CompareRemoteToLocal = (tasks,listFiles,sid) => {
+/* Here we'll build a 'common' list containing information
+ of both servers (source server informations as well as destination server)
+ The said list will follow the following format:
+[
+        {
+                "path":"path",
+                "name":"name",
+                "extension":".mkv",
+                "status":"finished",
+                "DS_id":123
+        }
+]
+*/
+let CompareAndBuildCommonList = (tasks,listFiles,sid) => {
   console.log('Compare sources files to current tasks');
   let fileToAddToDownloadList = [];
   let fileToRemoveFromServer = [];
@@ -103,20 +115,35 @@ let CompareRemoteToLocal = (tasks,listFiles,sid) => {
     let alreadyExists = false;
     let finished = false;
     for (let j = 0; j < tasks.length; j++) {
-
+      // file on source server is already added on destination server
       if (remoteItem.name == tasks[j].title) {
-        alreadyExists = true;
-        if (tasks[j].status == 'finished') {
-          fileToRemoveFromServer.push(remoteItem);
-        }
+	listFiles[i].status = tasks[j].status;
+	listFiles[i].DS_id = tasks[j].id;
       }
     }
-    if (!alreadyExists) {
-      fileToAddToDownloadList.push(remoteItem);
-    }
   }
-  CleanUpDownloadTasks(fileToAddToDownloadList,sid);
-  RemoveFilesFromServer(fileToRemoveFromServer);
+  HandleCommonList(listFiles,sid);
+}
+
+let HandleCommonList =(listFiles,sid) => {
+	let taskCpt = 0;
+	// Due to Synology API limitation, I choose to limit the list to 20 items.
+	let numberOfTasksToAdd = Math.min(20,maxTasksCount - currentTasksCount);
+	for(let i=0;i<listFiles.length;i++){
+		if(listFiles[i].status == undefined){
+			if(taskCpt++ < numberOfTasksToAdd){
+			//TODO add task to DS
+			AddOneFileToDownloadList(listFiles[i],sid);
+			}
+		}
+		else if(listFiles[i].status == 'finished'){
+			//TODO clean up task THEN remove it from server
+			RemoveFileFromRemoteServerThenCleanUpTaskFromDS(listFiles[i],sid);
+		}
+		else{
+			//Task is already on DS and is either waiting to be downloaded or currently downloading the file
+		}
+	}
 }
 
 let GetRemoteFileList = (tasks,sid) => {
@@ -132,27 +159,63 @@ let GetRemoteFileList = (tasks,sid) => {
      }
      else{
        console.log('Getting list of files SUCCESS');
-       CompareRemoteToLocal(tasks,res.body,sid);
+       CompareAndBuildCommonList(tasks,res.body,sid);
      }
    });
 };
 
-let AddFileToDownloadList = (list,sid) => {
-  console.log('Starting to add files to Download Task List');
-  var destFolderArg = destFolder ? '&destination='+destFolder : '';
-  // Due to Synology API limitation, I choose to limit the list to 20 items.
-  let numberOfTasksToAdd = Math.min(20,maxTasksCount - currentTasksCount);
-  list = list.splice(0,Math.min(numberOfTasksToAdd,list.length));
-  for (let i = 0; i < list.length; i++) {
+let RemoveFileFromRemoteServerThenCleanUpTaskFromDS = (jsonFile, sid) => {
+	console.log('Starting to clean up file',jsonFile.name);
+	let title  = jsonFile.name;
+	let files = [];
+	files.push(jsonFile);
+	request
+         .delete(remoteUrl + '/files')
+         .send(files)
+         .set('Authorization', 'Bearer '+remoteToken)
+         .set('Content-Type','application/json')
+         .end(function(err,res){
+         	if(err){
+         		console.log("Failed to delete on remote server");
+         	}
+           	else{
+             		console.log(title,'has been deleted on source server -> Removing associated task on DS...');
+			console.log('Removing '+title+' from download tasks');
+		        request
+		         .get(synoUrl + '/webapi/DownloadStation/task.cgi')
+		         .query({
+		             api:'SYNO.DownloadStation.Task',
+		             version:'1',
+		             method:'delete',
+		             id:jsonFile.DS_id,
+		             _sid:sid
+		           })
+		           .end(function(err,res){
+		                 if (err) {
+		                    console.error("Error while calling Synology API");
+		                 }
+		                 else {
+		                   if(JSON.parse(res.text).error){
+		                       console.error("Error while calling Synology API",JSON.parse(res.text).error);
+		                   }
+		                   else{
+		                      console.log('File',title +' deleted from DS');
+		                   }
+		                 }
+		            });		
+           	}
+          });
 
-    let endPath = list[i].path;
+}
+
+let AddOneFileToDownloadList = (jsonFile, sid) => {
+    let endPath = jsonFile.path;
     let firstSlashIndex = endPath.indexOf('/');
-    let url_file = rootUrlServer+list[i].path.substring(firstSlashIndex+1)+list[i].name;
-    //url_file = url_file.replace(/\/\//,'/');
+    let url_file = rootUrlServer+jsonFile.path.substring(firstSlashIndex+1)+jsonFile.name;
     url_file = url_file.replace(/ /g,'%20');
     url_file = url_file.replace(/,/g,'%2C');
-    console.log('Adding file',list[i].name);
-    //console.log('adding file with url',url_file);
+    url_file = url_file.replace(/#/g,'%23');
+    console.log('Adding file',jsonFile.name);
     request
      .get(synoUrl + '/webapi/DownloadStation/task.cgi')
      .query({
@@ -164,94 +227,23 @@ let AddFileToDownloadList = (list,sid) => {
      })
      .end(function(err,res){
        if (err) {
-         console.log('FAILED to add',list[i].name);
+         console.log('FAILED to add',jsonFile.name);
          console.log(err);
        }
        else{
          if (JSON.parse(res.text).error) {
-           console.log('FAILED to add',list[i].name);
+           console.log('FAILED to add',jsonFile.name);
            console.log('error',JSON.parse(res.text).error);
          }
          else{
-           console.log('File added with SUCCESS:',list[i].name);
+           console.log('File added with SUCCESS:',jsonFile.name);
          }
 
        }
      });
-  }
 }
-let RemoveFilesFromServer = (files) => {
-  //console.log('Removings files',files);
-  request
-    .delete(remoteUrl + '/files')
-    .send(files)
-    .set('Authorization', 'Bearer '+remoteToken)
-    .set('Content-Type','application/json')
-    .end(function(err,res){
-      if(err){
-        console.log("Failed to delete on remote server");
-      }
-      else{
-        console.log(files.length,'files have been deleted');
-      }
-    });
-};
 
-let CleanUpDownloadTasks = (list,sid) => {
-  console.log('Cleaning up tasks on DS...');
-  request
-    .get(synoUrl + '/webapi/DownloadStation/task.cgi')
-    .query({
-      api:'SYNO.DownloadStation.Task',
-      version:'1',
-      method:'list',
-      additional:'file',
-      _sid:sid
-    })
-    .end(function(err,res){
-      if (err) {
-        console.error("Error while calling Synology API");
-      }
-      else {
-        if(JSON.parse(res.text).error){
-
-        }
-        else{
-          var tasks = JSON.parse(res.text).data.tasks;
-          for (var i = 0; i < tasks.length; i++) {
-            if (tasks[i].status == 'finished') {
-              let title = tasks[i].title;
-              console.log('Removing '+title+' from download tasks');
-              request
-                .get(synoUrl + '/webapi/DownloadStation/task.cgi')
-                .query({
-                  api:'SYNO.DownloadStation.Task',
-                  version:'1',
-                  method:'delete',
-                  id:tasks[i].id,
-                  _sid:sid
-                })
-                .end(function(err,res){
-                  if (err) {
-                      console.error("Error while calling Synology API");
-                  }
-                  else {
-                    if(JSON.parse(res.text).error){
-                        console.error("Error while calling Synology API",JSON.parse(res.text).error);
-                    }
-                    else{
-                      console.log('File',title +' deleted');
-                    }
-                  }
-                });
-            }
-          }
-        }
-      }
-    });
-    AddFileToDownloadList(list,sid);
-};
-var i=0;
+// ######## CRON JOB ############
 new CronJob('0 */3 * * * *', function() {
   loginToRemoteServer(remoteUser,remotePassword)
 }, null, true);
