@@ -116,7 +116,11 @@ let CompareAndBuildCommonList = (tasks,listFiles,sid) => {
     let finished = false;
     for (let j = 0; j < tasks.length; j++) {
       // file on source server is already added on destination server
-      if (remoteItem.name == tasks[j].title) {
+      let taskTitle = tasks[j].title;
+      taskTitle = taskTitle.replace(/%20/g,' ');
+      taskTitle = taskTitle.replace(/%2C/g,',');
+      taskTitle = taskTitle.replace(/%23/g,'#');
+      if (remoteItem.name == taskTitle) {
 	listFiles[i].status = tasks[j].status;
 	listFiles[i].DS_id = tasks[j].id;
       }
