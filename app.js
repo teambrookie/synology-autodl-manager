@@ -27,7 +27,7 @@ let loginToRemoteServer = (user,pass) => {
       remoteToken = null;
     }
     else {
-      remoteToken = JSON.stringify(res);
+      remoteToken = res.text;
       console.log('>>Login success to source server');
       loginToDestServer(destUser,destPassword);
     }
