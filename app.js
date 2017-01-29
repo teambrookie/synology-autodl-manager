@@ -9,7 +9,7 @@ let remoteUrl = process.env.REMOTE_URL || 'http://anax.feralhosting.com:8088';
 let remoteToken;
 var request = require('superagent');
 let CronJob = require('cron').CronJob;
-
+let acceptedExtensions = ['mkv','avi','mp4','srt'];
 let destFolder = process.env.DS_DEST_FOLDER;
 let maxTasksCount = 30;
 let currentTasksCount = 30;
@@ -93,6 +93,20 @@ let GetDownloadTaskList = (sid) => {
      }
    });
 };
+
+let FilterListByExtension = (tasks, listFiles, sid) => {
+	let filteredList = [];
+	for (let i=0 ; i< listFiles.length ; i++){
+		for(let j=0;j<acceptedExtensions.length;j++){
+			if(listFiles[i].extension == '.'+acceptedExtensions[j]){
+				filteredList.push(listFiles[i]);
+				break;
+			}
+		}
+	}
+	CompareAndBuildCommonList(tasks,filteredList,sid);
+}
+
 /* Here we'll build a 'common' list containing information
  of both servers (source server informations as well as destination server)
  The said list will follow the following format:
@@ -163,7 +177,7 @@ let GetRemoteFileList = (tasks,sid) => {
      }
      else{
        console.log('Getting list of files SUCCESS');
-       CompareAndBuildCommonList(tasks,res.body,sid);
+	FilterListByExtension(tasks,res.body,sid);
      }
    });
 };
