@@ -1,4 +1,4 @@
-let loopTime = process.env.LOOP_TIME || 10000;
+let cronConfig = process.env.CRON_CONFIG || '0 */3 * * * *';
 let remoteUser = process.env.REMOTE_USER || 'default_user';
 let remotePassword = process.env.REMOTE_PASSWORD || 'no_password';
 let destPassword = process.env.DS_PASSWORD || 'no_password';
@@ -10,7 +10,7 @@ let remoteToken;
 var request = require('superagent');
 let CronJob = require('cron').CronJob;
 let acceptedExtensions = ['mkv','avi','mp4','srt'];
-let destFolder = process.env.DS_DEST_FOLDER;
+let destFolder = process.env.DS_DEST_FOLDER || undefined;
 let maxTasksCount = 30;
 let currentTasksCount = 30;
 let loginToRemoteServer = (user,pass) => {
@@ -241,7 +241,9 @@ let AddOneFileToDownloadList = (jsonFile, sid) => {
        version: '1',
        method: 'create',
        uri: url_file,
-       _sid: sid
+       _sid: sid,
+       destination:destFolder
+
      })
      .end(function(err,res){
        if (err) {
@@ -262,6 +264,6 @@ let AddOneFileToDownloadList = (jsonFile, sid) => {
 }
 
 // ######## CRON JOB ############
-new CronJob('0 */3 * * * *', function() {
+new CronJob(cronConfig, function() {
   loginToRemoteServer(remoteUser,remotePassword)
 }, null, true);
