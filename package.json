@@ -8,7 +8,7 @@
   "description": "Download files from a json file using Synology download station",
   "main": "app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "mocha"
   },
   "keywords": [
     "synology",
@@ -19,5 +19,8 @@
   "dependencies": {
     "cron": "1.2.1",
     "superagent": "3.3.1"
+  },
+  "devDependencies": {
+    "mocha": "3.2.0"
   }
 }

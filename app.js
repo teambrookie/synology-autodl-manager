@@ -1,3 +1,7 @@
+let request = require('superagent');
+let CronJob = require('cron').CronJob;
+let filter = require('./utils/filter');
+
 let cronConfig = process.env.CRON_CONFIG || '0 */3 * * * *';
 let remoteUser = process.env.REMOTE_USER || 'default_user';
 let remotePassword = process.env.REMOTE_PASSWORD || 'no_password';
@@ -7,12 +11,13 @@ let rootUrlServer = process.env.ROOT_PATH_REMOTE_SERVER || 'http://bloodmaker.an
 let synoUrl = process.env.DS_URL || 'http://192.168.1.200:5555';
 let remoteUrl = process.env.REMOTE_URL || 'http://anax.feralhosting.com:8088';
 let remoteToken;
-var request = require('superagent');
-let CronJob = require('cron').CronJob;
-let acceptedExtensions = ['mkv','avi','mp4','srt'];
+
+
 let destFolder = process.env.DS_DEST_FOLDER || undefined;
 let maxTasksCount = 30;
 let currentTasksCount = 30;
+
+
 let loginToRemoteServer = (user,pass) => {
   console.log('Login to source server');
   console.log('logging to',remoteUrl + '/auth');
@@ -22,8 +27,8 @@ let loginToRemoteServer = (user,pass) => {
   .send({ username: user, password: pass })
   .end(function(err, res){
     if (err) {
-      console.log('Login failed');
-      console.log(res);
+      console.error('Login failed');
+      console.error(res);
       remoteToken = null;
     }
     else {
@@ -49,12 +54,12 @@ let loginToDestServer = (user,password) => {
   }) // query string
   .end(function(err, res){
     if (err) {
-      console.log('Error trying to connect to destination server (timeout)')
+      console.error('Error trying to connect to destination server (timeout)')
     }
     else{
       let jsonResponse = JSON.parse(res.text);
       if (jsonResponse.error) {
-        console.log(jsonResponse.error.code);
+        console.error(jsonResponse.error.code);
       }
       else {
         console.log('>>Login success to destination server');
@@ -78,34 +83,23 @@ let GetDownloadTaskList = (sid) => {
    })
    .end(function(err,res){
      if (err) {
-       console.log('Error trying to connect to destination server (timeout)')
+       console.error('Error trying to connect to destination server (timeout)')
      }
      else{
        let jsonResponse = JSON.parse(res.text);
        if (jsonResponse.error) {
-         console.log(jsonResponse.error.code);
+         console.error(jsonResponse.error.code);
        }
        else {
          console.log('>>Listing tasks ok');
-	 currentTasksCount = jsonResponse.data.tasks.length;
+	       currentTasksCount = jsonResponse.data.tasks.length;
          GetRemoteFileList(jsonResponse.data.tasks, sid);
        }
      }
    });
 };
 
-let FilterListByExtension = (tasks, listFiles, sid) => {
-	let filteredList = [];
-	for (let i=0 ; i< listFiles.length ; i++){
-		for(let j=0;j<acceptedExtensions.length;j++){
-			if(listFiles[i].extension == '.'+acceptedExtensions[j]){
-				filteredList.push(listFiles[i]);
-				break;
-			}
-		}
-	}
-	CompareAndBuildCommonList(tasks,filteredList,sid);
-}
+
 
 /* Here we'll build a 'common' list containing information
  of both servers (source server informations as well as destination server)
@@ -172,12 +166,13 @@ let GetRemoteFileList = (tasks,sid) => {
    .set('Authorization', 'Bearer '+remoteToken)
    .end(function(err,res){
      if (err) {
-       console.log('FAILED');
-       console.log(err);
+       console.error('FAILED');
+       console.error(err);
      }
      else{
        console.log('Getting list of files SUCCESS');
-	FilterListByExtension(tasks,res.body,sid);
+	      let filteredList = filter.FilterListByExtension(res.body);
+        CompareAndBuildCommonList(tasks,filteredList,sid);
      }
    });
 };
@@ -220,7 +215,7 @@ let RemoveFileFromRemoteServerThenCleanUpTaskFromDS = (jsonFile, sid) => {
 		                      console.log('File',title +' deleted from DS');
 		                   }
 		                 }
-		            });		
+		            });
            	}
           });
 
