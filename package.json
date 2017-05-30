@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "repository": {
     "type": "git",
-    "url":"https://github.com/TeamBrookie/synology-autodl-manager"
+    "url": "https://github.com/TeamBrookie/synology-autodl-manager"
   },
   "description": "Download files from a json file using Synology download station",
   "main": "app.js",
@@ -17,6 +17,7 @@
   "author": "Etienne STROBBE",
   "license": "MIT",
   "dependencies": {
-    "node-rest-client": "2.0.1"
+    "cron": "1.2.1",
+    "superagent": "3.3.1"
   }
 }
