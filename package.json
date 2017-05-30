@@ -21,6 +21,8 @@
     "superagent": "3.3.1"
   },
   "devDependencies": {
-    "mocha": "3.2.0"
+    "mocha": "3.2.0",
+    "mockery": "^2.0.0",
+    "simple-mock": "^0.7.3"
   }
 }

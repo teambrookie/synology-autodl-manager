@@ -14,7 +14,7 @@ let FilterListByExtension = (listFiles) => {
 }
 
 module.exports = {
-	filterListByExtension: function(listFiles){
+	FilterListByExtension: function(listFiles){
 		return FilterListByExtension(listFiles);
 	}
 }
